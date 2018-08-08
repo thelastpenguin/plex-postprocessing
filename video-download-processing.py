@@ -33,6 +33,11 @@ def run_filebot(inputdir, outputdir):
     p.wait()
     return p.returncode
 
+def flood_remove_completed():
+    p = subprocess.Popen(["sh", os.path.join(script_location, "flood-remove-completed.sh")])
+    p.wait()
+    return p.returncode
+
 print("reading directory tree before filebot runs")
 files_before = set(scan_directory(args.download_dir))
 
@@ -60,7 +65,7 @@ def remove_empty_dirs(rootdir):
         else:
             count += 1
 
-    if count == 0 and rootdir ~= args.download_dir:
+    if count == 0 and rootdir != args.download_dir:
         print("\tremoving empty directory %s" % rootdir)
         os.rmdir(rootdir)
     
@@ -68,3 +73,6 @@ def remove_empty_dirs(rootdir):
 
 print("removing empty directories in the downloads dir")
 remove_empty_dirs(args.download_dir)
+
+print("finally, having flood remove all downloads with status completed")
+flood_remove_completed()
