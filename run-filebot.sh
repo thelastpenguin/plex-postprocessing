@@ -1,0 +1,14 @@
+filebot \
+	-script fn:amc \
+	--output "$OUTPUT" \
+	--action move -non-strict \
+	-non-strict "$INPUT" \
+	--log-file /mnt/amc.log \
+	--conflict auto \
+	--def excludeList=/mnt/amc.txt \
+	--def minLengthMS=300000 \
+	--def unsorted=y \
+	--def music=y \
+	--def movieFormat="Movies/{n} ({y})/{n} ({y}) [{resolution}]" \
+	--def seriesFormat="TV/{localize.English.n}/{episode.special ? 'Special' : 'Season '+s.pad(2)}/{localize.English.n} - {episode.special ? 'S00E'+special.pad(2) : s00e00} - {t} [{resolution}]" \
+	--lang English
