@@ -44,7 +44,7 @@ if filebot_returncode == 0:
     for file in scan_directory(args.download_dir):
         if file in files_before:
             print("\tremoving %s" % file)
-            # os.remove(file)
+            os.remove(file)
         else:
             print("\tskipping %s, it was not here when filebot started" % file)
 else:
@@ -60,9 +60,9 @@ def remove_empty_dirs(rootdir):
         else:
             count += 1
 
-    if count == 0:
+    if count == 0 and rootdir ~= args.download_dir:
         print("\tremoving empty directory %s" % rootdir)
-        # os.rmdir(rootdir)
+        os.rmdir(rootdir)
     
     return count 
 

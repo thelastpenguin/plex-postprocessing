@@ -1,0 +1,3 @@
+[submodule "sickbeard_mp4_automator"]
+	path = sickbeard_mp4_automator
+	url = https://github.com/mdhiggins/sickbeard_mp4_automator.git
