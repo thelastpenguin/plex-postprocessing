@@ -121,9 +121,10 @@ while True:
                 "-i", file, 
                 "-movflags", "faststart",
                 "-preset", "fast",
-                "-crf", "22",
+                "-profile:v", "high",
+                "-crf", "23",
                 "-maxrate", "4000k",
-                "-bufsize", "7000k",
+                "-bufsize", "4000k",
                 "-c:v", "libx264",
                 "-c:a", "aac", "-b:a", "192k",
                 temp_video

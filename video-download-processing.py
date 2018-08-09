@@ -38,6 +38,10 @@ def flood_remove_completed():
     p.wait()
     return p.returncode
 
+
+print("finally, having flood remove all downloads with status completed")
+flood_remove_completed()
+
 print("reading directory tree before filebot runs")
 files_before = set(scan_directory(args.download_dir))
 
@@ -74,5 +78,3 @@ def remove_empty_dirs(rootdir):
 print("removing empty directories in the downloads dir")
 remove_empty_dirs(args.download_dir)
 
-print("finally, having flood remove all downloads with status completed")
-flood_remove_completed()
