@@ -112,13 +112,19 @@ while True:
             add_to_blacklist(file, "ffprobe failed to fetch media info")
         
         temp_location = get_temp_dir()
+        source_copy_video = os.path.join(temp_location, "source" + ext)
         temp_video = os.path.join(temp_location, "test.mp4")
+
+        try:
+            shutil.copyfile(file, source_copy_video)
+        except:
+            add_to_blacklist(file, "failed to copy source into temp directory")
 
         if "h264" not in video_codec:
             print("\tfile needs transcoding from non-streamable codec")
             pargs = [args.ffmpeg]
             pargs += [
-                "-i", file, 
+                "-i", source_copy_video, 
                 "-movflags", "faststart",
                 "-preset", "fast",
                 "-profile:v", "high", "-level", "4.1",
