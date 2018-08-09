@@ -12,15 +12,20 @@ import time
 import shutil
 import random
 import string 
+import sys
+
+script_location = os.path.dirname(__file__)
+temp_dir = os.path.join(script_location, "_temp_")
 
 parser = argparse.ArgumentParser(description='Running post-processing on media files')
 parser.add_argument('media_dir', help="the location of the media files")
 parser.add_argument('--delete', action="store_true")
 parser.add_argument('--interval', default=-1, type=int, help="the repeat interval, -1 to disable (default)")
+parser.add_argument('--ffmpeg', default='ffmpeg')
+parser.add_argument('--ffprobe', default='ffprobe')
+parser.add_argument('--blacklist', default= os.path.join(script_location, "blacklist.txt"))
 args = parser.parse_args()
 
-script_location = os.path.dirname(__file__)
-temp_dir = os.path.join(script_location, "_temp_")
 
 def scan_directory(directory):
     files = []
@@ -36,6 +41,18 @@ if os.path.exists(temp_dir):
     shutil.rmtree(temp_dir)
 os.mkdir(temp_dir)
 
+if os.path.exists(args.blacklist):
+    with open(args.blacklist, "r") as f:
+        blacklist = set(line.strip() for line in f if line[0] != "\t")
+else:
+    blacklist = set()
+
+def add_to_blacklist(file, message=None):
+    with open(args.blacklist, "a") as f:
+        f.write(file + "\n")
+        if message != None:
+            f.write("\t" + message + "\n")
+
 def get_temp_dir():
     loc = os.path.join(temp_dir, ''.join(random.choices(string.ascii_uppercase + string.digits, k=64)))
     os.mkdir(loc)
@@ -44,14 +61,15 @@ def get_temp_dir():
 os.nice(19)
 
 print("running post-processing.py")
-extensions_to_transcode = [
+extensions_to_transcode = set([
     ".flv",
     ".avi",
     ".mkv",
     ".wmv",
     ".mov",
     ".m4v",
-]
+    ".mp4",
+])
 
 if os.path.exists(os.path.join(script_location, "blacklist.txt")):
     with open(os.path.join(script_location, "blacklist.txt"), "r") as f:
@@ -68,38 +86,79 @@ while True:
     for file in files:
         basename, ext = os.path.splitext(file)
 
+        if ext not in extensions_to_transcode: continue 
+        output_name = basename + "new.mp4"
+        if output_name in file_set: continue 
+        
         if file in blacklist: 
             print("skipping %s because it is BLACKLISTED" % file)
             continue 
 
-        if ext not in extensions_to_transcode: continue 
-        output_name = basename + ".mp4"
-        if output_name in file_set: continue 
+        print("processing file: " + file)
+        pargs = [args.ffprobe]
+        pargs += [
+            "-v", "error", 
+            "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name",
+            file 
+        ]
         
-        print("found file %s which needs transcoding to mp4" % file)
-
-        temp_location = get_temp_dir()
-        print("\tcreated a temporary directory: %s" % temp_location)
-
-        pargs = ["python"]
-        pargs += [os.path.join(script_location, "./sickbeard_mp4_automator/manual.py")]
-        pargs += ["--input", file]
-        pargs += ["--config", os.path.join(script_location, "autoProcess.ini")]
-        pargs += ["--moveto", os.path.join(temp_location, "temp.mp4")]
-        if not args.delete:
-            pargs += ["--nodelete"]
-        pargs += ["--auto"]
-
-        p = subprocess.Popen(pargs)
-        p.wait()
-
-        print("\tdone transcoding %s" % file)
-        print("\tcopying to %s" % output_name)
         try:
-            shutil.move(os.path.join(temp_location, "temp.mp4"), output_name)
+            p = subprocess.Popen(pargs, stdout=subprocess.PIPE)
+            p.wait()
+            video_codec = p.stdout.read().decode('ascii').strip().split("\n")[1]
+            print(video_codec)
+        except Exception as e:
+            add_to_blacklist(file, "ffprobe failed to fetch media info")
+        
+        temp_location = get_temp_dir()
+        temp_video = os.path.join(temp_location, "test.mp4")
+
+        if "h264" not in video_codec:
+            print("\tfile needs transcoding from non-streamable codec")
+            pargs = [args.ffmpeg]
+            pargs += [
+                "-i", file, 
+                "-movflags", "faststart",
+                "-preset", "fast",
+                "-crf", "22",
+                "-maxrate", "4000k",
+                "-bufsize", "7000k",
+                "-c:v", "libx264",
+                "-c:a", "aac", "-b:a", "192k",
+                temp_video
+            ]
+
+            p = subprocess.Popen(pargs)
+            p.wait() 
+
+        else:
+            print("\tfile needs video copying, audio transcoding")
+            pargs = [args.ffmpeg]
+            pargs += [
+                "-i", file, 
+                "-movflags", "faststart",
+                "-c:v", "copy",
+                "-c:a", "aac", "-b:a", "192k",
+                temp_video
+            ]
+
+            p = subprocess.Popen(pargs)
+            p.wait() 
+
+        print("finished transcoding, final file size: %d\n\toriginal size: %d" % (
+            os.path.getsize(temp_video),
+            os.path.getsize(file)
+        ))
+        time.sleep(10)
+
+        try:
+            shutil.move(temp_video, output_name)
+
+            if args.delete:
+                shutil.rm(file)
         except:
-            with open(os.path.join(script_location, "blacklist.txt"), "a") as f:
-                f.write("%s\n" % file)
+            add_to_blacklist(file, "unable to move output file, does not exist because transcode failed")
 
         shutil.rmtree(temp_location)
 
