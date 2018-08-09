@@ -121,12 +121,13 @@ while True:
                 "-i", file, 
                 "-movflags", "faststart",
                 "-preset", "fast",
-                "-profile:v", "high",
+                "-profile:v", "high", "-level", "4.1",
                 "-crf", "23",
                 "-maxrate", "4000k",
                 "-bufsize", "4000k",
                 "-c:v", "libx264",
                 "-c:a", "aac", "-b:a", "192k",
+                "-pix_fmt", "yuv420p",
                 temp_video
             ]
 
