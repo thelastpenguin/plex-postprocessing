@@ -153,12 +153,15 @@ while True:
         temp_location = get_temp_dir()
 
         try:
+            print("\tcopying source video...")
+            src_video_copy = os.path.join(temp_location, basicname + ext)
+            shutil.copyfile(filepath, src_video_copy)
+
             temp_video = os.path.join(temp_location, basicname + ".mp4")
             print("\ttemp video file name: " + temp_video)
 
-
-            video_codec = ffmpeg_get_vcodec(filepath)
-            subtitle_languages = ffmpeg_list_subtitles(filepath)
+            video_codec = ffmpeg_get_vcodec(src_video_copy)
+            subtitle_languages = ffmpeg_list_subtitles(src_video_copy)
             # NOTE: subtitles must be named mediafile.language code.srt
             print("\t" + video_codec)
             print("\tsubtitle languages: " + str(subtitle_languages))
@@ -174,7 +177,7 @@ while True:
                         eng_sub_index = idx 
                     try:
                         srt_path = os.path.join(temp_location, "%s.%s.srt" % (basicname, lang))
-                        extract_embedded_subs(filepath, idx, srt_path)
+                        extract_embedded_subs(src_video_copy, idx, srt_path)
                         print("\textracted language: " + str(lang) + " -> " + srt_path)
                     except:
                         print("\tfailed to extract subtitles: " + str(lang) + " it might be an image based format")
@@ -185,7 +188,7 @@ while True:
                 print("\tfile needs transcoding from non-streamable codec")
                 pargs = [args.ffmpeg]
                 pargs += [
-                    "-i", filepath, 
+                    "-i", src_video_copy, 
                     "-movflags", "faststart",
                     "-preset", "fast",
                     "-profile:v", "high", "-level", "4.1",
@@ -194,7 +197,7 @@ while True:
                     "-bufsize", "4000k",
                     # "-c:s", "mov_text", # subtitles
                     "-c:v", "libx264",
-                    "-c:a", "aac", "-b:a", "192k",
+                    "-c:a", "aac", "-b:a", "256",
                     "-pix_fmt", "yuv420p",
                     "-t", "60",
                 ]
@@ -203,7 +206,7 @@ while True:
                 print("\tfile needs video copying, audio transcoding")
                 pargs = [args.ffmpeg]
                 pargs += [
-                    "-i", filepath, 
+                    "-i", src_video_copy, 
                     "-movflags", "faststart",
                     "-c:s", "mov_text", # subtitles
                     "-c:v", "copy",
@@ -225,7 +228,7 @@ while True:
 
             print("moving files back to source directory:")
             for f in os.listdir(temp_location):
-                if f == "." or f == "..": continue 
+                if f == "." or f == ".." or f.endswith(ext): continue 
                 dst = os.path.join(file_dirname, f)
                 src = os.path.join(temp_location, f)
                 if not os.path.exists(dst):
