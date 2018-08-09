@@ -218,6 +218,8 @@ while True:
 
             p = subprocess.Popen(pargs)
             p.wait() 
+            if p.returncode != 0:
+                raise Exception("transcode failed.")
 
             time.sleep(1)
 
