@@ -232,8 +232,8 @@ while True:
             
             if args.delete:
                 shutil.rm(filepath)
-        # except:
-        #     add_to_blacklist(file, "unable to move output file, does not exist because transcode failed")
+        except Exception as e:
+            add_to_blacklist(file, str(e))
         finally:
             shutil.rmtree(temp_location)
 
