@@ -28,6 +28,7 @@ parser.add_argument('--interval', default=-1, type=int, help="the repeat interva
 parser.add_argument('--ffmpeg', default='ffmpeg')
 parser.add_argument('--ffprobe', default='ffprobe')
 parser.add_argument('--blacklist', default= os.path.join(script_location, "blacklist.txt"))
+parser.add_argument('--debug', action="store_true")
 args = parser.parse_args()
 
 # function for scanning a directory
@@ -181,7 +182,12 @@ while True:
                         print("\textracted language: " + str(lang) + " -> " + srt_path)
                     except:
                         print("\tfailed to extract subtitles: " + str(lang) + " it might be an image based format")
+                        try:
+                            os.unlink(srt_path)
+                        except: pass 
                         should_hardcode = True # try to hard code if available, maybe that will work?
+            # should_hardcode will be set to true if there are any non-image based subtitle formats in the file
+            # because non-image based subtitles cause the former commands to error out
 
             # transcoding if necessary
             if "h264" not in video_codec or should_hardcode:
@@ -193,13 +199,11 @@ while True:
                     "-preset", "fast",
                     "-profile:v", "high", "-level", "4.1",
                     "-crf", "23",
-                    "-maxrate", "4000k",
-                    "-bufsize", "4000k",
-                    # "-c:s", "mov_text", # subtitles
+                    "-maxrate", "8000k",
+                    "-bufsize", "8000k",
                     "-c:v", "libx264",
-                    "-c:a", "aac", "-b:a", "256",
+                    "-c:a", "aac", "-b:a", "256k",
                     "-pix_fmt", "yuv420p",
-                    "-t", "60",
                 ]
 
             else:
@@ -208,11 +212,13 @@ while True:
                 pargs += [
                     "-i", src_video_copy, 
                     "-movflags", "faststart",
-                    "-c:s", "mov_text", # subtitles
                     "-c:v", "copy",
                     "-c:a", "aac", "-b:a", "256k",
+                    "-c:s", "mov_text"
                 ]
-
+            
+            if args.debug:
+                pargs += ["-t", "30s"]
 
             if eng_sub_index != None and should_hardcode:
                 pargs += ["-filter_complex", "[0:v][0:%s]overlay[v]" % eng_sub_index, "-map", "[v]"]
@@ -225,7 +231,7 @@ while True:
                 raise Exception("transcode failed.")
 
             time.sleep(1)
-
+            
             print("moving files back to source directory:")
             for f in os.listdir(temp_location):
                 if f == "." or f == ".." or f.endswith(ext): continue 
@@ -236,7 +242,7 @@ while True:
                     shutil.move(src, dst)
             
             if args.delete:
-                shutil.rm(filepath)
+                os.unlink(filepath)
         except Exception as e:
             add_to_blacklist(file, str(e))
         finally:
