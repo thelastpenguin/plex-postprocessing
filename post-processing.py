@@ -242,12 +242,12 @@ while True:
                 src = os.path.join(temp_location, f)
                 if not os.path.exists(dst):
                     print("\t\t%s -> %s" % (src, dst))
-                    shutil.move(src, dst)
+                    shutil.copyfile(src, dst)
             
             if args.delete:
                 os.unlink(filepath)
         except Exception as e:
-            add_to_blacklist(file, str(e))
+            add_to_blacklist(filepath, str(e))
         finally:
             shutil.rmtree(temp_location)
 
