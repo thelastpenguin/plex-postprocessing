@@ -18,6 +18,7 @@ import random
 import string 
 import sys
 import traceback 
+from collections import defaultdict 
 
 script_location = os.path.dirname(__file__)
 temp_dir = os.path.join(script_location, "_temp_")
@@ -201,12 +202,28 @@ while True:
             should_hardcode = False
             if len(subtitle_languages) > 0:
                 print("ripping subtitles into separate files...")
+                
+                lang_counts = defaultdict(int)
+                for tup in subtitle_languages:
+                    if len(tup) != 2:
+                        idx, lang = tup 
+                    else:
+                        idx = tup[0]
+                        lang = "eng"
 
-                for idx, lang in subtitle_languages:
+                    # if it is the 2nd or 3rd or ... occurance, we add a number to the language
+                    # when creating the srt file name
+                    count = lang_counts[idx]
+                    lang_counts[idx] += 1
+
                     if lang == "eng":
                         eng_sub_index = idx 
                     try:
-                        srt_path = os.path.join(temp_location, "%s.%s.srt" % (basicname, lang))
+                        lang_with_count = lang 
+                        if count > 0:
+                            lang_with_count += str(count)
+
+                        srt_path = os.path.join(temp_location, "%s.%s.srt" % (basicname, lang_with_count))
                         extract_embedded_subs(src_video_copy, idx, srt_path)
                         print("\textracted language: " + str(lang) + " -> " + srt_path)
                     except:
