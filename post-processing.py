@@ -205,7 +205,7 @@ while True:
                 
                 lang_counts = defaultdict(int)
                 for tup in subtitle_languages:
-                    if len(tup) != 2:
+                    if len(tup) == 2:
                         idx, lang = tup 
                     else:
                         idx = tup[0]
