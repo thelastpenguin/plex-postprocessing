@@ -192,14 +192,13 @@ while True:
                     "-movflags", "faststart",
                     "-preset", "fast",
                     "-profile:v", "high", "-level", "4.1",
-                    "-crf", "23",
-                    "-maxrate", "4000k",
-                    "-bufsize", "4000k",
+                    "-crf", "20",
+                    "-maxrate", "8000k",
+                    "-bufsize", "8000k",
                     # "-c:s", "mov_text", # subtitles
                     "-c:v", "libx264",
                     "-c:a", "aac", "-b:a", "256",
                     "-pix_fmt", "yuv420p",
-                    "-t", "60",
                 ]
 
             else:
