@@ -206,6 +206,9 @@ while True:
                 print("ripping subtitles into separate files...")
                 
                 lang_counts = defaultdict(int)
+
+                subtitles_extracted = []
+
                 for tup in subtitle_languages:
                     if len(tup) == 2:
                         idx, lang = tup 
@@ -229,13 +232,19 @@ while True:
                         srt_path = os.path.join(temp_location, "%s.%s.srt" % (basicname, lang_with_count))
                         print("\tattempting to extract language: " + lang_with_count + " to location: " + srt_path)
                         extract_embedded_subs(src_video_copy, idx, srt_path)
+                        subtitles_extracted.append(srt_path)
                         print("\textracted language: " + str(lang) + " -> " + srt_path)
                     except:
                         print("\tfailed to extract subtitles: " + str(lang) + " it might be an image based format")
                         try:
                             os.unlink(srt_path)
                         except: pass 
-                        should_hardcode = True # try to hard code if available, maybe that will work?
+                
+                if len(subtitles_extracted) == 0:
+                    # no subtitles successfully extracted, but there are subs available
+                    # perhaps they are al image based subtitles
+                    # try to hard code some subs
+                    should_hardcode = True 
 
             #
             # BUILD OUT THE FFMPEG COMMAND AND RUN IT!
