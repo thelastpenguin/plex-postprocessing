@@ -186,32 +186,34 @@ while True:
                             os.unlink(srt_path)
                         except: pass 
                         should_hardcode = True # try to hard code if available, maybe that will work?
-            # should_hardcode will be set to true if there are any non-image based subtitle formats in the file
-            # because non-image based subtitles cause the former commands to error out
 
-            # transcoding if necessary
+            #
+            # BUILD OUT THE FFMPEG COMMAND AND RUN IT!
+            # 
+            pargs = [args.ffmpeg, "-i", src_video_copy]
+
+            if eng_sub_index != None and should_hardcode: # can only burn in subtitles if should_overlay is true
+                pargs += ["-filter_complex", "[0:v][0:%s]overlay[v]" % eng_sub_index, "-map", "[v]", "-map", "0:a"]
+            else:
+                should_hardcode = False 
+            
             if "h264" not in video_codec or should_hardcode:
+                # crf settings explained: https://slhck.info/video/2017/02/24/crf-guide.html
                 print("\tfile needs transcoding from non-streamable codec")
-                pargs = [args.ffmpeg]
                 pargs += [
-                    "-i", src_video_copy, 
                     "-movflags", "faststart",
                     "-preset", "fast",
                     "-profile:v", "high", "-level", "4.1",
                     "-crf", "21",
-                    "-maxrate", "8000k",
-                    "-bufsize", "8000k",
-                    # "-c:s", "mov_text", # subtitles
+                    "-maxrate", "8M", "-bufsize", "12M",
                     "-c:v", "libx264",
-                    "-c:a", "aac", "-b:a", "256k",
+                    "-c:a", "aac", "-b:a", "256k", "-bsf:a", "aac_adtstoasc",
                     "-pix_fmt", "yuv420p",
                 ]
 
             else:
                 print("\tfile needs video copying, audio transcoding")
-                pargs = [args.ffmpeg]
                 pargs += [
-                    "-i", src_video_copy, 
                     "-movflags", "faststart",
                     "-c:v", "copy",
                     "-c:a", "aac", "-b:a", "256k",
@@ -221,8 +223,8 @@ while True:
             if args.debug:
                 pargs += ["-t", "30s"]
 
-            if eng_sub_index != None and should_hardcode:
-                pargs += ["-filter_complex", "[0:v][0:%s]overlay[v]" % eng_sub_index, "-map", "[v]"]
+            
+                # pargs += ["-filter_complex", "[0:v][0:s]overlay", "-map", "[v]"]
 
             pargs += [temp_video]
 
