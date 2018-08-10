@@ -113,6 +113,8 @@ def extract_embedded_subs(file, stream_idx, srt_out):
     p.wait()
     if p.returncode != 0:
         raise Exception("failed to rip subtitles at index: %s" % (str(stream_idx)))
+        print("FAILED TO RIP SUBTITLES: ERROR:")
+        print("\t\t" + p.stderr.read().decode("ascii"))
     return True
 
 print("running post-processing.py")
@@ -214,16 +216,18 @@ while True:
                     # if it is the 2nd or 3rd or ... occurance, we add a number to the language
                     # when creating the srt file name
                     count = lang_counts[idx]
-                    lang_counts[idx] += 1
+                    lang_counts[lang] += 1
 
                     if lang == "eng":
                         eng_sub_index = idx 
+                    
                     try:
                         lang_with_count = lang 
                         if count > 0:
                             lang_with_count += str(count)
 
                         srt_path = os.path.join(temp_location, "%s.%s.srt" % (basicname, lang_with_count))
+                        print("\tattempting to extract language: " + lang_with_count + " to location: " + srt_path)
                         extract_embedded_subs(src_video_copy, idx, srt_path)
                         print("\textracted language: " + str(lang) + " -> " + srt_path)
                     except:
