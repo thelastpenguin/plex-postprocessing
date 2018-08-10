@@ -218,7 +218,7 @@ while True:
 
                     # if it is the 2nd or 3rd or ... occurance, we add a number to the language
                     # when creating the srt file name
-                    count = lang_counts[idx]
+                    count = lang_counts[lang]
                     lang_counts[lang] += 1
 
                     if lang == "eng":
