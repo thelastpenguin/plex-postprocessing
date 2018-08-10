@@ -1,3 +1,5 @@
+REMOTE="https://tv.lastpengu.in/RPC2 -username admin -password 2114"
+
 for torrentid in $(xmlrpc $REMOTE download_list "" | grep -o "'.*'" | sed "s/'//g"); do
     echo "Processing torrent $torrentid";
 
