@@ -50,8 +50,12 @@ filebot_returncode = run_filebot(args.download_dir, args.output_dir)
 
 if filebot_returncode == 0:
     print("removing files that were here before filebot ran UNLESS THEY ARE IN WHITELIST")
+    curtime = time.time()
     for file in scan_directory(args.download_dir):
-        if file in files_before:
+        file_age = os.path.getmtime(file) - curtime 
+        # we don't remove files that are less than an hour old
+        # or files that were added before filebot started
+        if file in files_before and file_age >= 60 * 60: 
             print("\tremoving %s" % file)
             os.remove(file)
         else:
@@ -77,4 +81,4 @@ def remove_empty_dirs(rootdir):
 
 print("removing empty directories in the downloads dir")
 remove_empty_dirs(args.download_dir)
-
+# replace with this: find /path/to/uploadcache -type d -empty -delete

@@ -17,6 +17,7 @@ import shutil
 import random
 import string 
 import sys
+import traceback 
 
 script_location = os.path.dirname(__file__)
 temp_dir = os.path.join(script_location, "_temp_")
@@ -129,6 +130,34 @@ if os.path.exists(os.path.join(script_location, "blacklist.txt")):
         blacklist = set(f.read().split("\n"))
 else:
     blacklist = set()
+
+
+#
+# RUN SOME SIMPLE FILESYSTEM CLEANUP
+#
+def remove_empty_dirs(rootdir):
+    count = 0
+    for file in os.listdir(rootdir):
+        if file == "." or file == "..": continue 
+        file_path = os.path.join(rootdir, file)
+        if os.path.isdir(file_path):
+            count += remove_empty_dirs(file_path)
+        else:
+            count += 1
+
+    if count == 0 and rootdir != args.download_dir:
+        print("\tremoving empty directory %s" % rootdir)
+        os.rmdir(rootdir)
+    
+    return count 
+
+print("removing empty directories in the downloads dir")
+remove_empty_dirs(args.media_dir)
+
+
+#
+# BEGIN TRANSCODING LOOP
+#
 
 while True:
     print("scanning files...")
@@ -248,6 +277,12 @@ while True:
                 os.unlink(filepath)
         except Exception as e:
             add_to_blacklist(filepath, str(e))
+            print("ENCOUNTERED ERROR: " + str(e))
+            message = traceback.format_exc()
+            print(message)
+            with open(os.path.join(script_location, "error-log.txt"), "a") as f:
+                f.write("ENCOUNTERED ERROR: %s \n %s" % (str(e), message))
+            
         finally:
             shutil.rmtree(temp_location)
 
@@ -257,3 +292,4 @@ while True:
         time.sleep(args.interval)
     else:
         break 
+
