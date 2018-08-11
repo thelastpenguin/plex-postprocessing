@@ -20,7 +20,7 @@ def scan_directory(directory):
     files = []
     for file in os.listdir(directory):
         if file == "." or file == "..": continue 
-        if file in ignore_list: continue 
+        if file.lower().strip() in ignore_list: continue 
         file_path = os.path.join(directory, file)
         if os.path.isfile(file_path):
             yield file_path 

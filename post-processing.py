@@ -148,7 +148,7 @@ def remove_empty_dirs(rootdir):
         else:
             count += 1
 
-    if count == 0 and rootdir != args.download_dir:
+    if count == 0 and rootdir != args.media_dir:
         print("\tremoving empty directory %s" % rootdir)
         os.rmdir(rootdir)
     
@@ -303,7 +303,7 @@ while True:
                     print("\t\t%s -> %s" % (src, dst))
                     shutil.copyfile(src, dst)
             
-            if args.delete:
+            if args.delete and os.path.exists(output_name):
                 os.unlink(filepath)
         except Exception as e:
             add_to_blacklist(filepath, str(e))

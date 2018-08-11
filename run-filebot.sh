@@ -1,7 +1,7 @@
 filebot \
 	-script fn:amc \
 	--output "$OUTPUT" \
-	--action move -non-strict \
+	--action copy -non-strict \
 	-non-strict "$INPUT" \
 	--log-file /mnt/amc.log \
 	--conflict auto \
