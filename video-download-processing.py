@@ -1,6 +1,8 @@
 import argparse 
 import os 
 import subprocess 
+import time
+
 
 parser = argparse.ArgumentParser(description='Running post-processing on media files')
 parser.add_argument('download_dir', help="the location of the media files")
@@ -52,7 +54,7 @@ if filebot_returncode == 0:
     print("removing files that were here before filebot ran UNLESS THEY ARE IN WHITELIST")
     curtime = time.time()
     for file in scan_directory(args.download_dir):
-        file_age = os.path.getmtime(file) - curtime 
+        file_age = curtime - os.path.getmtime(file) 
         # we don't remove files that are less than an hour old
         # or files that were added before filebot started
         if file in files_before and file_age >= 60 * 60: 
