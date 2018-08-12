@@ -267,9 +267,11 @@ while True:
                     "-maxrate", "8M", "-bufsize", "12M",
                     "-c:v", "libx264",
                     "-c:a", "aac", "-b:a", "256k", "-bsf:a", "aac_adtstoasc",
-                    "-c:s", "mov_text",
                     "-pix_fmt", "yuv420p",
                 ]
+
+                if len(subtitles_extracted) == len(subtitle_languages): # 100% extraction, they are all text based 
+                    pargs += ["-c:s", "mov_text"]
             else:
                 print("\tfile needs video copying, audio transcoding")
                 pargs += [
