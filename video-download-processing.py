@@ -2,6 +2,7 @@ import argparse
 import os 
 import subprocess 
 import time
+import difflib
 
 
 parser = argparse.ArgumentParser(description='Running post-processing on media files')
@@ -48,6 +49,21 @@ print("reading directory tree before filebot runs")
 files_before = set(scan_directory(args.download_dir))
 
 print("running filebot")
+
+# TODO: finish this...
+# def rename_bad_subtitles(dir):
+#     listing = os.listdir(dir)
+#     files = [f for f in listing if os.path.isfile(f)]
+#     dirs = [f for f in listing if os.path.isdir(f) and f != "." and f != ".."]
+#     movies = list(filter(lambda x: x.endswith(".mkv") or x.endswith(".mp4"), listing))
+#     srts = list(filter(lambda x: x.endswith(".srt") or x.endswith(".srt"), listing))
+#     if len(movies) == 1:
+#         movie_base = os.path.basename(movies[0])
+#         for srt in srts:
+#             SequenceMatcher(None, "abcd", "bcde")
+#     for dir in dirs:
+#         rename_bad_subtitles(dir)
+
 filebot_returncode = run_filebot(args.download_dir, args.output_dir)
 
 if filebot_returncode == 0:
@@ -57,7 +73,7 @@ if filebot_returncode == 0:
         file_age = curtime - os.path.getmtime(file) 
         # we don't remove files that are less than an hour old
         # or files that were added before filebot started
-        if file in files_before and file_age >= 60 * 60: 
+        if file in files_before and file_age >= 20 * 60: 
             print("\tremoving %s" % file)
             os.remove(file)
         else:

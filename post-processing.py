@@ -18,6 +18,7 @@ import random
 import string 
 import sys
 import traceback 
+import json
 from collections import defaultdict 
 
 script_location = os.path.dirname(__file__)
@@ -69,6 +70,25 @@ def get_temp_dir():
 os.nice(19)
 
 # transcoding helpers
+def ffmpeg_get_streams(file):
+    # prints JSON formatted stream data
+    pargs = [
+        "ffprobe",
+        "-show_streams", 
+        "-show_entries", 
+        "format=bit_rate,filename,start_time:" + 
+        "stream=duration,width,height,display_aspect_ratio,r_frame_rate,bit_rate,codec_name",
+        "-of", "json", 
+        "-v", "quiet", 
+        "-i", file
+    ]
+    
+    p = subprocess.Popen(pargs, stdout=subprocess.PIPE)
+    p.wait()
+    if p.returncode != 0:
+        raise Exception("ffprobe failed to extract subtitle list")
+    return json.loads(p.stdout.read().decode("ascii"))
+
 def ffmpeg_list_subtitles(file):
     pargs = [
         args.ffprobe,
@@ -101,6 +121,23 @@ def ffmpeg_get_vcodec(file):
         raise Exception("ffprobe failed to get video codec")
     return p.stdout.read().decode('ascii').strip().split("\n")[1]
 
+def ffmpeg_get_acodec(file):
+    pargs = [args.ffprobe]
+    pargs += [
+        "-v", "error", 
+        "-select_streams", "a:0",
+        # "-show_entries", "stream=codec_name",
+        file 
+    ]
+
+    p = subprocess.Popen(pargs, stdout=subprocess.PIPE)
+    p.wait()
+
+    if p.returncode != 0:
+        raise Exception("ffprobe failed to get video codec")
+    return p.stdout.read().decode("ascii")
+    # return p.stdout.read().decode('ascii').strip().split("\n")[1]
+
 def extract_embedded_subs(file, stream_idx, srt_out):
     pargs = [
         args.ffmpeg,
@@ -127,12 +164,6 @@ extensions_to_transcode = set([
     ".m4v",
     ".mp4",
 ])
-
-if os.path.exists(os.path.join(script_location, "blacklist.txt")):
-    with open(os.path.join(script_location, "blacklist.txt"), "r") as f:
-        blacklist = set(f.read().split("\n"))
-else:
-    blacklist = set()
 
 
 #
@@ -176,12 +207,8 @@ while True:
 
         if ext not in extensions_to_transcode: continue 
         output_name = os.path.join(file_dirname, basicname + ".mp4")
-        if output_name in file_set: continue 
-            
-        if filepath in blacklist: 
-            print("skipping %s because it is BLACKLISTED" % filepath)
-            continue 
-
+        # if output_name in file_set: continue 
+        
         print("processing file: " + filepath)
         temp_location = get_temp_dir()
 
@@ -193,21 +220,25 @@ while True:
             temp_video = os.path.join(temp_location, basicname + ".mp4")
             print("\ttemp video file name: " + temp_video)
 
+
             video_codec = ffmpeg_get_vcodec(src_video_copy)
+            audio_codec = ffmpeg_get_acodec(src_video_copy)
             subtitle_languages = ffmpeg_list_subtitles(src_video_copy)
             # NOTE: subtitles must be named mediafile.language code.srt
             print("\t" + video_codec)
+            print("\t" + audio_codec)
+            time.sleep(10000)
             print("\tsubtitle languages: " + str(subtitle_languages))
 
             # extracting subtitles
             eng_sub_index = None
             should_hardcode = False
+            subtitles_extracted = []
+            
             if len(subtitle_languages) > 0:
                 print("ripping subtitles into separate files...")
                 
                 lang_counts = defaultdict(int)
-
-                subtitles_extracted = []
 
                 for tup in subtitle_languages:
                     if len(tup) == 2:
@@ -268,6 +299,7 @@ while True:
                     "-c:v", "libx264",
                     "-c:a", "aac", "-b:a", "256k", "-bsf:a", "aac_adtstoasc",
                     "-pix_fmt", "yuv420p",
+                    "-map_metadata", "-1"
                 ]
 
                 if len(subtitles_extracted) == len(subtitle_languages): # 100% extraction, they are all text based 
@@ -278,7 +310,8 @@ while True:
                     "-movflags", "faststart",
                     "-c:v", "copy",
                     "-c:a", "aac", "-b:a", "256k",
-                    "-c:s", "mov_text"
+                    "-c:s", "mov_text",
+                    "-map_metadata", "-1"
                 ]
             
             if args.debug:
@@ -292,7 +325,7 @@ while True:
             p = subprocess.Popen(pargs)
             p.wait() 
             if p.returncode != 0:
-                raise Exception("transcode failed.")
+                raise Exception("transcode failed")
 
             time.sleep(1)
             
@@ -306,7 +339,10 @@ while True:
                     shutil.copyfile(src, dst)
             
             if args.delete and os.path.exists(output_name):
+                print("\tREMOVED ORIGINAL FILE: %s" % filepath)
                 os.unlink(filepath)
+            
+            add_to_blacklist(filepath, "success")
         except Exception as e:
             add_to_blacklist(filepath, str(e))
             print("ENCOUNTERED ERROR: " + str(e))
@@ -314,7 +350,6 @@ while True:
             print(message)
             with open(os.path.join(script_location, "error-log.txt"), "a") as f:
                 f.write("ENCOUNTERED ERROR: %s \n %s" % (str(e), message))
-            
         finally:
             shutil.rmtree(temp_location)
 
@@ -324,4 +359,3 @@ while True:
         time.sleep(args.interval)
     else:
         break 
-
