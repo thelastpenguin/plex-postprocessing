@@ -8,19 +8,23 @@ import difflib
 parser = argparse.ArgumentParser(description='Running post-processing on media files')
 parser.add_argument('download_dir', help="the location of the media files")
 parser.add_argument('output_dir', help="the location of the media files")
-parser.add_argument('ignore_list', help="list of directories to ignore")
 args = parser.parse_args()
 
 print("beginning injestion of new downloads")
 
 script_location = os.path.dirname(__file__)
 
-ignore_list = list(map(lambda x: x.strip(), args.ignore_list.lower().split(",")))
+process_directories = [
+    "movies",
+    "tv",
+    "radarr",
+    "tv-sonarr",
+]
 
-def is_in_ignore_list(path):
-    path = path.lower()
-    for item in ignore_list:
-        if item in path: return True 
+def should_process(filepath):
+    filepath = filepath.lower()
+    for key in process_directories:
+        if key in filepath: return True 
     return False 
 
 def scan_directory(directory):
@@ -29,7 +33,7 @@ def scan_directory(directory):
         if file == "." or file == "..": continue 
         file_path = os.path.join(directory, file)
         if os.path.isfile(file_path):
-            yield file_path 
+            yield file_path
         else:
             yield from scan_directory(file_path)
 
@@ -45,7 +49,6 @@ def flood_remove_completed():
     p = subprocess.Popen(["sh", os.path.join(script_location, "flood-remove-completed.sh")])
     p.wait()
     return p.returncode
-
 
 print("finally, having flood remove all downloads with status completed")
 flood_remove_completed()
@@ -75,18 +78,20 @@ if filebot_returncode == 0:
     print("removing files that were here before filebot ran UNLESS THEY ARE IN WHITELIST")
     curtime = time.time()
     for file in scan_directory(args.download_dir):
-        file_age = curtime - os.path.getmtime(file) 
-        if is_in_ignore_list(file):
-            print("\tskipping %s, it is in the IGNORE LIST" % file)
-            continue 
-
-        # we don't remove files that are less than an hour old
-        # or files that were added before filebot started
-        if file in files_before and file_age >= 20 * 60: 
-            print("\tremoving %s" % file)
-            os.remove(file)
+        if not should_process(file):
+            print("moving %s to the 'Other' folder since it is not a media file")
+            common_base = os.path.commonprefix([file, args.download_dir])
+            move_to_location = os.path.join(args.output_dir, "Other", os.path.relpath(file, common_base))
+            os.renames(file, move_to_location)
         else:
-            print("\tskipping %s, it was not here when filebot started" % file)
+            file_age = curtime - os.path.getmtime(file) 
+            # we don't remove files that are less than an hour old
+            # or files that were added before filebot started
+            if file in files_before and file_age >= 20 * 60: 
+                print("\tremoving %s" % file)
+                os.remove(file)
+            else:
+                print("\tskipping %s, it was not here when filebot started" % file)
 else:
     print("WARNING!!! FILEBOT DID NOT EXIT WITH GOOD STATUS. REQUIRES MANUAL INTERVENTION")
 
