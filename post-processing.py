@@ -162,7 +162,6 @@ extensions_to_transcode = set([
     ".wmv",
     ".mov",
     ".m4v",
-    ".mp4",
 ])
 
 
@@ -207,7 +206,7 @@ while True:
 
         if ext not in extensions_to_transcode: continue 
         output_name = os.path.join(file_dirname, basicname + ".mp4")
-        # if output_name in file_set: continue 
+        if output_name in file_set: continue 
         
         print("processing file: " + filepath)
         temp_location = get_temp_dir()
@@ -227,7 +226,7 @@ while True:
             # NOTE: subtitles must be named mediafile.language code.srt
             print("\t" + video_codec)
             print("\t" + audio_codec)
-            time.sleep(10000)
+            time.sleep(1)
             print("\tsubtitle languages: " + str(subtitle_languages))
 
             # extracting subtitles
@@ -295,7 +294,7 @@ while True:
                     "-preset", "fast",
                     "-profile:v", "high", "-level", "4.1",
                     "-crf", "21",
-                    "-maxrate", "8M", "-bufsize", "12M",
+                    "-maxrate", "10M", "-bufsize", "15M",
                     "-c:v", "libx264",
                     "-c:a", "aac", "-b:a", "256k", "-bsf:a", "aac_adtstoasc",
                     "-pix_fmt", "yuv420p",
@@ -340,7 +339,7 @@ while True:
             
             if args.delete and os.path.exists(output_name):
                 print("\tREMOVED ORIGINAL FILE: %s" % filepath)
-                os.unlink(filepath)
+                os.rename(filepath, filepath + ".original")
             
             add_to_blacklist(filepath, "success")
         except Exception as e:

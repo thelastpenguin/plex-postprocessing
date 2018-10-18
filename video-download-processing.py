@@ -15,13 +15,18 @@ print("beginning injestion of new downloads")
 
 script_location = os.path.dirname(__file__)
 
-ignore_list = map(lambda x: x.strip(), args.ignore_list.lower().split(","))
+ignore_list = list(map(lambda x: x.strip(), args.ignore_list.lower().split(",")))
+
+def is_in_ignore_list(path):
+    path = path.lower()
+    for item in ignore_list:
+        if item in path: return True 
+    return False 
 
 def scan_directory(directory):
     files = []
     for file in os.listdir(directory):
         if file == "." or file == "..": continue 
-        if file.lower().strip() in ignore_list: continue 
         file_path = os.path.join(directory, file)
         if os.path.isfile(file_path):
             yield file_path 
@@ -71,6 +76,10 @@ if filebot_returncode == 0:
     curtime = time.time()
     for file in scan_directory(args.download_dir):
         file_age = curtime - os.path.getmtime(file) 
+        if is_in_ignore_list(file):
+            print("\tskipping %s, it is in the IGNORE LIST" % file)
+            continue 
+
         # we don't remove files that are less than an hour old
         # or files that were added before filebot started
         if file in files_before and file_age >= 20 * 60: 

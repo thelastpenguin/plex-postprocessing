@@ -9,6 +9,6 @@ filebot \
 	--def minLengthMS=300000 \
 	--def unsorted=y \
 	--def music=y \
-	--def movieFormat="Movies/{n} ({y})/{n} ({y}) [{resolution}]" \
+	--def movieFormat="{vf == /2160p/ ? 'Movies4K' : 'Movies'}/{n} ({y})/{n} ({y}) [{resolution}]" \
 	--def seriesFormat="TV/{localize.English.n}/{episode.special ? 'Special' : 'Season '+s.pad(2)}/{localize.English.n} - {episode.special ? 'S00E'+special.pad(2) : s00e00} - {t} [{resolution}]" \
 	--lang English
