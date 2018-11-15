@@ -62,8 +62,11 @@ def add_to_blacklist(file, message=None):
         if message != None:
             f.write("\t" + message + "\n")
 
+temp_dir_idx = 0
 def get_temp_dir():
-    loc = os.path.join(temp_dir, ''.join(random.choices(string.ascii_uppercase + string.digits, k=64)))
+    global temp_dir_idx  
+    loc = os.path.join(temp_dir, str(temp_dir_idx))
+    temp_dir_idx += 1
     os.mkdir(loc)
     return loc
 
