@@ -2,31 +2,29 @@ import argparse
 import os 
 import subprocess 
 import time
-import difflib
-
-
+from difflib import SequenceMatcher
+import shutil 
+import time
 parser = argparse.ArgumentParser(description='Running post-processing on media files')
 parser.add_argument('download_dir', help="the location of the media files")
 parser.add_argument('output_dir', help="the location of the media files")
+parser.add_argument('-minimum_free_space', default=40, type=int, help="the minimum amount of free space in gigabytes to reserve on the disk")
 args = parser.parse_args()
 
-print("beginning injestion of new downloads")
+print("\n\n\n\n\n\n\n\nBEGINNING INJESTION OF NEW DOWNLOADS: " + time.strftime("%Y-%m-%d %H:%M"))
 
 script_location = os.path.dirname(__file__)
 
-process_directories = [
-    "movies",
-    "tv",
-    "radarr",
-    "tv-sonarr",
-]
+process_directories = {
+    "movies": ["fixsubs", "rename", "clear"],
+    "tv": ["fixsubs", "rename", "clear"],
+    "radarr": ["fixsubs", "rename", "clear"],
+    "tv-sonarr": ["fixsubs", "rename", "clear"],
+    "anime": ["fixsubs", "rename", "clear"],
+    "other": ["archive"],
+}
 
-def should_process(filepath):
-    filepath = filepath.lower()
-    for key in process_directories:
-        if key in filepath: return True 
-    return False 
-
+# get all the files in a given directory
 def scan_directory(directory):
     files = []
     for file in os.listdir(directory):
@@ -37,63 +35,115 @@ def scan_directory(directory):
         else:
             yield from scan_directory(file_path)
 
-def run_filebot(inputdir, outputdir):
+print("reading a tree of all files before running, this acts as a 'checkpoint'")
+files_before = set(scan_directory(args.download_dir))
+
+def run_op_rename(inputdir, outputdir):
+
     env = os.environ.copy()
     env["INPUT"] = inputdir
     env["OUTPUT"] = outputdir
     p = subprocess.Popen(["sh", os.path.join(script_location, "run-filebot.sh")], env=env)
     p.wait()
-    return p.returncode
+
+    return p.returncode 
+
+def run_op_archive(dir_path):
+    for file in scan_directory(dir_path):
+        print("moving %s to the 'Other' folder since it is not a media file" % file)
+        common_base = os.path.commonprefix([file, args.download_dir])
+        move_to_location = os.path.join(args.output_dir, "Other", os.path.relpath(file, common_base))
+        os.makedirs(move_to_location, exist_ok=True)
+        shutil.move(file, move_to_location)
+
+def run_op_clear(dir_path):
+    global files_before 
+    
+    print("removing files in '%s' that were here before filebot ran" % dir_path)
+    curtime = time.time()
+    for file in scan_directory(args.download_dir):
+        file_age = curtime - os.path.getmtime(file) 
+        # we don't remove files that are less than an hour old
+        # or files that were added before filebot started
+        if file in files_before and file_age >= 20 * 60: 
+            print("\tremoving %s" % file)
+            os.remove(file)
+        else:
+            print("\tskipping %s, it was not here when filebot started" % file)
+
+def fix_subtitle_naming(media_path): 
+    print("Finding SRT files for %s" % media_path)
+
+    # takes the location of some media file
+    dirname = os.path.dirname(media_path)
+    basename = os.path.splitext(media_path)[0]
+
+    # the set of files in the directory
+    files = list(scan_directory(dirname))
+
+    # take only english srt's if languages are added to the srt's 
+    srt_files = list(file for file in files if file.endswith(".srt"))
+    srt_files_english = list(file for file in srt_files if (".en" in file) or ("eng" in file.lower()))
+
+    if len(srt_files) == 0: 
+        print("No srt files found, early return")
+        return 
+
+    if len(srt_files_english) > 0:
+        srt_files = srt_files_english 
+        print("Found an 'english' specific SRT so we will only check these from now on")
+
+    print("SRT options are: " + str(srt_files))
+    _, srt_name = max((SequenceMatcher(None, os.path.splitext(media_path)[0]+".english.srt", file).ratio(), file) for file in srt_files)
+    print("best match SRT was %s for movie %s" % (srt_name, media_path))
+
+    if srt_name != basename + ".en.srt":
+        shutil.copyfile(srt_name, basename + ".en.srt")
+
+def run_op_fixsubs(dir_path):
+    print("Fixing subtitles for directory: %s" % dir_path)
+    for file in scan_directory(dir_path):
+        if file.endswith(".mp4") or file.endswith(".mkv"):
+            fix_subtitle_naming(file)
 
 def flood_remove_completed():
+    usage = shutil.disk_usage(args.download_dir)
+    print("\tdisk use: %d/%d" % (usage.used, usage.total))
+    if usage.free > args.minimum_free_space * 1000000000:
+        print("\tleaving completed downloads as they are, usage.free not less than the minimum free space")
+        return 
     p = subprocess.Popen(["sh", os.path.join(script_location, "flood-remove-completed.sh")])
     p.wait()
     return p.returncode
 
-print("finally, having flood remove all downloads with status completed")
+print("first, having flood remove all downloads with status completed")
 flood_remove_completed()
 
-print("reading directory tree before filebot runs")
-files_before = set(scan_directory(args.download_dir))
+print("processing all directories in the download dir: %s, dirs: %s" % (args.download_dir, str(os.listdir(args.download_dir))))
+for top_level_dir in os.listdir(args.download_dir):
+    if top_level_dir == "." or top_level_dir == "..": continue 
+    dir_path = os.path.join(args.download_dir, top_level_dir)
+    if not os.path.isdir(dir_path): continue 
+    operations = process_directories.get(top_level_dir.lower())
+    
+    if operations == None: 
+        operations = process_directories["other"]
 
-print("running filebot")
+    # determine if the directory should be processed 
+    print("processing top level directory: " + dir_path)
+    print("\tdirectory operations: " + str(operations))
 
-# TODO: finish this...
-# def rename_bad_subtitles(dir):
-#     listing = os.listdir(dir)
-#     files = [f for f in listing if os.path.isfile(f)]
-#     dirs = [f for f in listing if os.path.isdir(f) and f != "." and f != ".."]
-#     movies = list(filter(lambda x: x.endswith(".mkv") or x.endswith(".mp4"), listing))
-#     srts = list(filter(lambda x: x.endswith(".srt") or x.endswith(".srt"), listing))
-#     if len(movies) == 1:
-#         movie_base = os.path.basename(movies[0])
-#         for srt in srts:
-#             SequenceMatcher(None, "abcd", "bcde")
-#     for dir in dirs:
-#         rename_bad_subtitles(dir)
-
-filebot_returncode = run_filebot(args.download_dir, args.output_dir)
-
-if filebot_returncode == 0:
-    print("removing files that were here before filebot ran UNLESS THEY ARE IN WHITELIST")
-    curtime = time.time()
-    for file in scan_directory(args.download_dir):
-        if not should_process(file):
-            print("moving %s to the 'Other' folder since it is not a media file")
-            common_base = os.path.commonprefix([file, args.download_dir])
-            move_to_location = os.path.join(args.output_dir, "Other", os.path.relpath(file, common_base))
-            os.renames(file, move_to_location)
+    for op in operations:
+        if op == "rename": 
+            run_op_rename(dir_path, args.output_dir)
+        elif op == "clear": 
+            run_op_clear(dir_path)
+        elif op == "archive":
+            run_op_archive(dir_path)
+        elif op == "fixsubs":
+            run_op_fixsubs(dir_path)
         else:
-            file_age = curtime - os.path.getmtime(file) 
-            # we don't remove files that are less than an hour old
-            # or files that were added before filebot started
-            if file in files_before and file_age >= 20 * 60: 
-                print("\tremoving %s" % file)
-                os.remove(file)
-            else:
-                print("\tskipping %s, it was not here when filebot started" % file)
-else:
-    print("WARNING!!! FILEBOT DID NOT EXIT WITH GOOD STATUS. REQUIRES MANUAL INTERVENTION")
+            print("UNRECOGNIZED OPERATION!!! BADNESS")
 
 def remove_empty_dirs(rootdir):
     count = 0

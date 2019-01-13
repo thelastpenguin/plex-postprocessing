@@ -22,7 +22,7 @@ import json
 from collections import defaultdict 
 
 script_location = os.path.dirname(__file__)
-temp_dir = os.path.join(script_location, "_temp_")
+temp_dir = os.path.join(script_location, "/mnt/bigdata/postprocessing-temp")
 
 parser = argparse.ArgumentParser(description='Running post-processing on media files')
 parser.add_argument('media_dir', help="the location of the media files")
@@ -195,6 +195,140 @@ remove_empty_dirs(args.media_dir)
 # BEGIN TRANSCODING LOOP
 #
 
+def transcode_file(filepath, temp_location):
+    global file_set 
+    file_dirname = os.path.dirname(filepath)
+    filename = os.path.basename(filepath)
+    basicname, ext = os.path.splitext(filename)
+    output_name = os.path.join(file_dirname, basicname + ".mp4")
+
+    print("\tcopying source video...")
+    src_video_copy = os.path.join(temp_location, basicname + ext)
+    shutil.copyfile(filepath, src_video_copy)
+
+    temp_video = os.path.join(temp_location, basicname + ".mp4")
+    print("\ttemp video file name: " + temp_video)
+
+
+    video_codec = ffmpeg_get_vcodec(src_video_copy)
+    audio_codec = ffmpeg_get_acodec(src_video_copy)
+    subtitle_languages = ffmpeg_list_subtitles(src_video_copy)
+    # NOTE: subtitles must be named mediafile.language code.srt
+    print("\t" + video_codec)
+    print("\t" + audio_codec)
+    time.sleep(1)
+    print("\tsubtitle languages: " + str(subtitle_languages))
+
+    # extracting subtitles
+    eng_sub_index = None
+    should_hardcode = False
+    subtitles_extracted = []
+    
+    if len(subtitle_languages) > 0:
+        print("ripping subtitles into separate files...")
+        
+        lang_counts = defaultdict(int)
+
+        for tup in subtitle_languages:
+            if len(tup) == 2:
+                idx, lang = tup 
+            else:
+                idx = tup[0]
+                lang = "eng"
+
+            # if it is the 2nd or 3rd or ... occurance, we add a number to the language
+            # when creating the srt file name
+            count = lang_counts[lang]
+            lang_counts[lang] += 1
+
+            if lang == "eng":
+                eng_sub_index = idx 
+            
+            try:
+                lang_with_count = lang 
+                if count > 0:
+                    lang_with_count += str(count)
+
+                srt_path = os.path.join(temp_location, "%s.%s.srt" % (basicname, lang_with_count))
+                print("\tattempting to extract language: " + lang_with_count + " to location: " + srt_path)
+                extract_embedded_subs(src_video_copy, idx, srt_path)
+                subtitles_extracted.append(srt_path)
+                print("\textracted language: " + str(lang) + " -> " + srt_path)
+            except:
+                print("\tfailed to extract subtitles: " + str(lang) + " it might be an image based format")
+                try:
+                    os.unlink(srt_path)
+                except: pass 
+        
+        if len(subtitles_extracted) == 0:
+            # no subtitles successfully extracted, but there are subs available
+            # perhaps they are al image based subtitles
+            # try to hard code some subs
+            should_hardcode = True 
+
+    #
+    # BUILD OUT THE FFMPEG COMMAND AND RUN IT!
+    # 
+    pargs = [args.ffmpeg, "-i", src_video_copy]
+
+    if eng_sub_index != None and should_hardcode: # can only burn in subtitles if should_overlay is true
+        pargs += ["-filter_complex", "[0:v][0:%s]overlay[v]" % eng_sub_index, "-map", "[v]", "-map", "0:a"]
+    else:
+        should_hardcode = False 
+    
+    if "h264" not in video_codec or should_hardcode:
+        # crf settings explained: https://slhck.info/video/2017/02/24/crf-guide.html
+        print("\tfile needs transcoding from non-streamable codec")
+        pargs += [
+            "-movflags", "faststart",
+            "-preset", "fast",
+            "-profile:v", "high", "-level", "4.1",
+            "-crf", "21",
+            "-maxrate", "10M", "-bufsize", "15M",
+            "-c:v", "libx264",
+            "-c:a", "aac", "-b:a", "256k", "-bsf:a", "aac_adtstoasc",
+            "-pix_fmt", "yuv420p",
+            "-map_metadata", "-1"
+        ]
+
+        if len(subtitles_extracted) == len(subtitle_languages): # 100% extraction, they are all text based 
+            pargs += ["-c:s", "mov_text"]
+    else:
+        print("\tfile needs video copying, audio transcoding")
+        pargs += [
+            "-movflags", "faststart",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "256k",
+            "-c:s", "mov_text",
+            "-map_metadata", "-1"
+        ]
+    
+    if args.debug:
+        pargs += ["-t", "30s"]
+        # pargs += ["-filter_complex", "[0:v][0:s]overlay", "-map", "[v]"]
+
+    pargs += [temp_video]
+
+    p = subprocess.Popen(pargs)
+    p.wait() 
+    if p.returncode != 0:
+        raise Exception("transcode failed for video: '" + filepath + "'")
+
+    time.sleep(1)
+    
+    print("moving files back to source directory:")
+    for f in os.listdir(temp_location):
+        if f == "." or f == ".." or f.endswith(ext): continue 
+        dst = os.path.join(file_dirname, f)
+        src = os.path.join(temp_location, f)
+        if not os.path.exists(dst):
+            print("\t\t%s -> %s" % (src, dst))
+            shutil.copyfile(src, dst)
+    
+    if args.delete and os.path.exists(output_name):
+        print("\tREMOVED ORIGINAL FILE: %s" % filepath)
+        os.rename(filepath, filepath + ".original")
+
 while True:
     print("scanning files...")
     files = list(scan_directory(args.media_dir))
@@ -202,148 +336,29 @@ while True:
     print("built directory list... %d files detected... now transcoding if needed." % (len(files)))
 
     for filepath in files:
-
+        # check if the file is black listed
+        if filepath in blacklist:
+            print("skipping file %s because it is on the blacklist" % filepath)
+            continue 
+        
+        # check if the file has already been converted
         file_dirname = os.path.dirname(filepath)
         filename = os.path.basename(filepath)
         basicname, ext = os.path.splitext(filename)
 
+        # check if we even need to transcode this file
         if ext not in extensions_to_transcode: continue 
+        
+        # check if the output file already exists in file_set 
         output_name = os.path.join(file_dirname, basicname + ".mp4")
         if output_name in file_set: continue 
-        
+
         print("processing file: " + filepath)
         temp_location = get_temp_dir()
 
+        # try to do the transcode if we made it this far
         try:
-            print("\tcopying source video...")
-            src_video_copy = os.path.join(temp_location, basicname + ext)
-            shutil.copyfile(filepath, src_video_copy)
-
-            temp_video = os.path.join(temp_location, basicname + ".mp4")
-            print("\ttemp video file name: " + temp_video)
-
-
-            video_codec = ffmpeg_get_vcodec(src_video_copy)
-            audio_codec = ffmpeg_get_acodec(src_video_copy)
-            subtitle_languages = ffmpeg_list_subtitles(src_video_copy)
-            # NOTE: subtitles must be named mediafile.language code.srt
-            print("\t" + video_codec)
-            print("\t" + audio_codec)
-            time.sleep(1)
-            print("\tsubtitle languages: " + str(subtitle_languages))
-
-            # extracting subtitles
-            eng_sub_index = None
-            should_hardcode = False
-            subtitles_extracted = []
-            
-            if len(subtitle_languages) > 0:
-                print("ripping subtitles into separate files...")
-                
-                lang_counts = defaultdict(int)
-
-                for tup in subtitle_languages:
-                    if len(tup) == 2:
-                        idx, lang = tup 
-                    else:
-                        idx = tup[0]
-                        lang = "eng"
-
-                    # if it is the 2nd or 3rd or ... occurance, we add a number to the language
-                    # when creating the srt file name
-                    count = lang_counts[lang]
-                    lang_counts[lang] += 1
-
-                    if lang == "eng":
-                        eng_sub_index = idx 
-                    
-                    try:
-                        lang_with_count = lang 
-                        if count > 0:
-                            lang_with_count += str(count)
-
-                        srt_path = os.path.join(temp_location, "%s.%s.srt" % (basicname, lang_with_count))
-                        print("\tattempting to extract language: " + lang_with_count + " to location: " + srt_path)
-                        extract_embedded_subs(src_video_copy, idx, srt_path)
-                        subtitles_extracted.append(srt_path)
-                        print("\textracted language: " + str(lang) + " -> " + srt_path)
-                    except:
-                        print("\tfailed to extract subtitles: " + str(lang) + " it might be an image based format")
-                        try:
-                            os.unlink(srt_path)
-                        except: pass 
-                
-                if len(subtitles_extracted) == 0:
-                    # no subtitles successfully extracted, but there are subs available
-                    # perhaps they are al image based subtitles
-                    # try to hard code some subs
-                    should_hardcode = True 
-
-            #
-            # BUILD OUT THE FFMPEG COMMAND AND RUN IT!
-            # 
-            pargs = [args.ffmpeg, "-i", src_video_copy]
-
-            if eng_sub_index != None and should_hardcode: # can only burn in subtitles if should_overlay is true
-                pargs += ["-filter_complex", "[0:v][0:%s]overlay[v]" % eng_sub_index, "-map", "[v]", "-map", "0:a"]
-            else:
-                should_hardcode = False 
-            
-            if "h264" not in video_codec or should_hardcode:
-                # crf settings explained: https://slhck.info/video/2017/02/24/crf-guide.html
-                print("\tfile needs transcoding from non-streamable codec")
-                pargs += [
-                    "-movflags", "faststart",
-                    "-preset", "fast",
-                    "-profile:v", "high", "-level", "4.1",
-                    "-crf", "21",
-                    "-maxrate", "10M", "-bufsize", "15M",
-                    "-c:v", "libx264",
-                    "-c:a", "aac", "-b:a", "256k", "-bsf:a", "aac_adtstoasc",
-                    "-pix_fmt", "yuv420p",
-                    "-map_metadata", "-1"
-                ]
-
-                if len(subtitles_extracted) == len(subtitle_languages): # 100% extraction, they are all text based 
-                    pargs += ["-c:s", "mov_text"]
-            else:
-                print("\tfile needs video copying, audio transcoding")
-                pargs += [
-                    "-movflags", "faststart",
-                    "-c:v", "copy",
-                    "-c:a", "aac", "-b:a", "256k",
-                    "-c:s", "mov_text",
-                    "-map_metadata", "-1"
-                ]
-            
-            if args.debug:
-                pargs += ["-t", "30s"]
-
-            
-                # pargs += ["-filter_complex", "[0:v][0:s]overlay", "-map", "[v]"]
-
-            pargs += [temp_video]
-
-            p = subprocess.Popen(pargs)
-            p.wait() 
-            if p.returncode != 0:
-                raise Exception("transcode failed")
-
-            time.sleep(1)
-            
-            print("moving files back to source directory:")
-            for f in os.listdir(temp_location):
-                if f == "." or f == ".." or f.endswith(ext): continue 
-                dst = os.path.join(file_dirname, f)
-                src = os.path.join(temp_location, f)
-                if not os.path.exists(dst):
-                    print("\t\t%s -> %s" % (src, dst))
-                    shutil.copyfile(src, dst)
-            
-            if args.delete and os.path.exists(output_name):
-                print("\tREMOVED ORIGINAL FILE: %s" % filepath)
-                os.rename(filepath, filepath + ".original")
-            
+            transcode_file(filepath, temp_location)
             add_to_blacklist(filepath, "success")
         except Exception as e:
             add_to_blacklist(filepath, str(e))
